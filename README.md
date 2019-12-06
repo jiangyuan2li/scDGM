@@ -1,4 +1,4 @@
-# scDL
+# scDGM
 single cell analysis with deep generative model
 
 References
