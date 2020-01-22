@@ -7,41 +7,69 @@ from torch.utils.data import DataLoader
 class DataManager:
     def __init__(self, 
                  batch_size, 
-                 split=False, 
+                 split=0, 
                  data_path="/data/cortex_scAnnData.h5ad"
             ):
+        assert(split <= 1)
         self._split = split
         self._batch_size = batch_size
+        self.raw_data = sc.read_h5ad(data_path)
 
-        if split:
-            print("Not implemented yet")
-            exit(0)
+        if split > 0:
+            self.raw_data = self.raw_data[np.random.permutation(len(self.raw_data))]
+            self.train_data = self.raw_data[:int(split * len(self.raw_data))]
+            self.val_data = self.raw_data[int(split * len(self.raw_data)):]
+            self.train_dataset = AnnDataset(self.train_data)
+            self.val_dataset = AnnDataset(self.val_data)
+            self.train_loader = DataLoader(
+                    dataset=self.train_dataset,
+                    batch_size=batch_size, 
+                    shuffle=True,
+                    drop_last = True
+                )
+            self.valid_loader = DataLoader(
+                    dataset=self.val_dataset,
+                    batch_size=batch_size, 
+                    shuffle=False,
+                    drop_last = True
+                )
         else:
-            self.train_dataset = AnnDataset(data_path)
-            self.train_loader = DataLoader(dataset=self.train_dataset,
-                                           batch_size=batch_size, 
-                                           shuffle=True,
-                                           drop_last = True
-                                        )
+            self.train_data = self.raw_data
+            self.train_dataset = AnnDataset(self.train_data)
+            self.train_loader = DataLoader(
+                    dataset=self.train_dataset,
+                    batch_size=batch_size, 
+                    shuffle=True,
+                    drop_last = True
+                )
 
     def getRawData(self, val=False):
-        # if val:
-        #       assert(self._split == True)
-        #       return self.val_dataset.raw
-        return self.train_dataset.raw_data
+        if val:
+            assert(self._split == True)
+            return self.val_data
+        return self.train_data
 
     def getX(self, val=False):
-        return torch.tensor(self.train_dataset.X)
+        if val:
+            assert(self._split == True)
+            return torch.tensor(self.val_data.obsm['X'])
+        return torch.tensor(self.train_data.obsm['X'])
 
     def getLocalMean(self, val=False):
+        if val:
+            assert(self._split == True)
+            return self.val_dataset.local_mean
         return self.train_dataset.local_mean
 
     def getLocalVar(self, val=False):
+        if val:
+            assert(self._split == True)
+            return self.val_dataset.local_var
         return self.train_dataset.local_var
 
 class AnnDataset(Dataset):
-    def __init__(self, data_path):
-        self.raw_data = sc.read_h5ad(data_path)
+    def __init__(self, data):
+        self.raw_data = data
         local_mean = np.log(self.raw_data.obsm['X'].sum(axis=1)).mean()
         local_var = np.log(self.raw_data.obsm['X'].sum(axis=1)).var()
         self.raw_data.obs['local_mean'] = local_mean

@@ -9,7 +9,7 @@
 
 __author__ = "Ryan King"
 __email__ = "kingrc15@tamu.edu"
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 
 from .datamgr import *
 from .model import *

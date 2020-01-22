@@ -163,7 +163,7 @@ class GMVAE(nn.Module):
 
         return self.lower_bound_weighted, self.kl_divergence_z, self.kl_divergence_y, self.reconstruction_error
     
-    def get_latent_cluster(self, x):
+    def get_latent_z(self, x):
       with torch.no_grad():
         y = torch.eye(self.n_clusters).to(self.device)
         latent = torch.zeros(self.n_clusters, x.size(0), self.latent_size)
@@ -174,3 +174,15 @@ class GMVAE(nn.Module):
           self.q_z_xy_encoder[k].train()
 
       return latent.permute(1,0,2)
+
+
+    def get_latent_y(self, x):
+      with torch.no_grad():
+        self.q_y_x_encoder.eval()
+        q_y_x = self.q_y_x_encoder(x)
+        q_y_logits = torch.log(q_y_x.probs) - torch.log1p(-q_y_x.probs)
+        q_y_probabilities = torch.mean(q_y_x.probs, dim=0)
+        self.q_y_x_encoder.train()
+
+      return q_y_x
+
