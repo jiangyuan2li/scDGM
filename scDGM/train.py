@@ -133,7 +133,7 @@ def randomSearch(
         gmvae, 
         batch_size=batch_size,
         train_loader=dataMgr.train_loader,
-        valid_loader=dataMgr.train_loader,
+        valid_loader=dataMgr.valid_loader,
         warm_up_epoch=warm_up_epoch,  
         num_epochs=epochs,
         weight_decay=weight_decay,

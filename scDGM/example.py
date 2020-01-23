@@ -17,10 +17,10 @@ dataMgr = scDGM.DataManager(
     data_path  = 'C:\\Users\\kingr\\OneDrive\\Documents\\Code\\scDGM\\scDGM\\data\\cortex_scAnnData.h5ad'
 )
 
-score, opt_params = scDGM.gridSearch(
+score, opt_params = scDGM.randomSearch(
     dataMgr     = dataMgr, 
     test_params = params, 
     batch_size  = 32, 
-    iterations  = 10, 
+    iterations  = 100, 
     scoring     = 'ARI'
 )
