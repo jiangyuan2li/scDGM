@@ -9,10 +9,11 @@
 
 __author__ = "Ryan King"
 __email__ = "kingrc15@tamu.edu"
-__version__ = "1.0.1"
+__version__ = "1.0.2"
 
 from .datamgr import *
 from .model import *
 from .layers import *
 from .loss import *
 from .train import *
+from .evaluation import *
