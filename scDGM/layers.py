@@ -15,7 +15,6 @@ class qy_given_x_encoder(nn.Module):
         self.logits = nn.Sequential(
             nn.Linear(n_hidden, n_clusters),
             nn.BatchNorm1d(n_clusters),
-            nn.Sigmoid(),
         )
 
     def forward(self, x):

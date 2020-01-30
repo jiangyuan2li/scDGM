@@ -47,9 +47,13 @@ def train(
       nn.utils.clip_grad_norm_(model.parameters(), 5)
       optimizer.step()
 
-      if i % 5 == 0 and verbose:
-          print("Training: Epoch[{}/{}], Step [{}/{}],  Loss: {:.4f}, KL Div Z: {:.4f}, KL Div Y: {:.4f}, Recon Loss: {:.4f}".format(
-                                  epoch + 1, num_epochs, i, len(train_loader), loss.item(), kl_divergence_z.item(), kl_divergence_y.item(), reconstruction_error.item()))
+      if i % 100 == 0 and verbose:
+        latent_y = model.get_latent_y(x)  # Latent y
+        guesses = torch.argmax(latent_y.probs, dim=1)
+
+        score = NMI(guesses.cpu().detach().numpy(), sample['labels'])
+        print("Training: Epoch[{}/{}], Step [{}/{}],  Loss: {:.4f}, KL Div Z: {:.4f}, KL Div Y: {:.4f}, Recon Loss: {:.4f}, Score: {}".format(
+                                  epoch + 1, num_epochs, i, len(train_loader), loss.item(), kl_divergence_z.item(), kl_divergence_y.item(), reconstruction_error.item(), score))
     if valid_loader:
       tot_loss = 0
       for i, sample in enumerate(valid_loader):

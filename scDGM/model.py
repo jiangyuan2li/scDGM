@@ -23,11 +23,6 @@ class GMVAE(nn.Module):
         self.n_clusters = n_clusters
         self.warm_up_weight = warm_up_weight
         self.kl_weight = kl_weight
-        self.recon_theta = nn.Parameter(
-              torch.abs(
-                  torch.randn(n_input)
-              ).clamp(0,100000)
-            ) 
 
         self.q_y_x_encoder = qy_given_x_encoder(n_input, n_hidden, n_clusters)
         self.q_z_xy_encoder = nn.ModuleList([])
@@ -95,7 +90,7 @@ class GMVAE(nn.Module):
           self.q_z_xy[k], z_mean[k], self.z[k] = self.q_z_xy_encoder[k](x, y[k])
           
           #p(z|y)
-          self.p_z_y[k], self.p_z_mean[k] = self.p_z_y_encoder[k](y[k].unsqueeze(0))
+          self.p_z_y[k], self.p_z_mean[k] = self.p_z_y_encoder[k](y[k].unsqueeze(0).repeat(x.size(0),1))
 
         self.y = self.q_y_x.probs
         
@@ -108,47 +103,16 @@ class GMVAE(nn.Module):
           pi[k], p[k], log_r[k] = self.p_x_z_decoder[k](self.z[k].squeeze())
 
       # Loss
-        kl_divergence_y = kl(self.q_y_x, self.p_y).mean()
-
-        z_reshaped = [
-            torch.reshape(
-                self.z[k],
-                shape=[
-                    self.n_iw_samples,
-                    self.n_mc_samples,
-                    -1,
-                    self.latent_size
-                ]
-            )
-            for k in range(self.n_clusters)
-        ]
+        q_y_given_x_entropy = self.q_y_x.entropy()
+        p_y_entropy = torch.log(torch.tensor(self.n_clusters).float())
+        kl_divergence_y = q_y_given_x_entropy - p_y_entropy
         
-        kl_divergence_z_mean = torch.zeros(x.size(0)).to(self.device)
+        kl_divergence_z_mean = torch.zeros(x.size(0), self.latent_size).to(self.device)
         reconstruct_losses = torch.zeros(self.n_clusters, x.size(0)).to(self.device)
         for k in range(self.n_clusters):
-          log_q_z_given_x_y = torch.sum(
-              self.q_z_xy[k].log_prob(
-                  z_reshaped[k]
-              ),
-              -1
-          )
-
-          log_p_z_given_y = torch.sum(
-              self.p_z_y[k].log_prob(
-                  z_reshaped[k]
-              ),
-              -1
-          )
-
-          kl_divergence_z_mean += torch.mean(
-              log_q_z_given_x_y - log_p_z_given_y
-          ) * self.y[:,k]
+          kl_divergence_z_mean += kl(self.q_z_xy[k],self.p_z_y[k])
 
           reconstruct_losses[k] = -log_zinb_positive(x, pi[k], p[k], log_r[k]).sum(dim = 1)
-
-        self.pi = pi
-        self.p = p
-        self.log_r = log_r        
 
         self.kl_divergence_z = torch.mean(kl_divergence_z_mean)
         self.kl_divergence_y = torch.mean(kl_divergence_y)
@@ -157,7 +121,7 @@ class GMVAE(nn.Module):
         self.lower_bound_weighted = (
             self.reconstruction_error
             + self.warm_up_weight * self.kl_weight * (
-                self.kl_divergence_z + kl_divergence_y
+                self.kl_divergence_z + self.kl_divergence_y
             )
         )
 
@@ -180,8 +144,6 @@ class GMVAE(nn.Module):
       with torch.no_grad():
         self.q_y_x_encoder.eval()
         q_y_x = self.q_y_x_encoder(x)
-        q_y_logits = torch.log(q_y_x.probs) - torch.log1p(-q_y_x.probs)
-        q_y_probabilities = torch.mean(q_y_x.probs, dim=0)
         self.q_y_x_encoder.train()
 
       return q_y_x
