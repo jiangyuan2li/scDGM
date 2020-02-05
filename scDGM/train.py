@@ -1,8 +1,11 @@
+import os
 import torch
 import torch.optim as optim
 import torch.nn as nn
 import torch.optim.lr_scheduler as Scheduler
 import numpy as np
+import torch.backends.cudnn as cudnn
+import datetime
 
 from .model import GMVAE
 from .evaluation import ARI, NMI
@@ -20,6 +23,12 @@ def train(
         verbose=True,
         patience=10,
       ):
+
+  file_dir = os.path.join(os.getcwd(), 'scDGM')
+
+  cudnn.benchmark = True
+  cudnn.enabled=True
+
   device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
   model.to(device)
   
@@ -31,13 +40,26 @@ def train(
 
   scheduler = Scheduler.CosineAnnealingLR(optimizer, num_epochs)
   patience_count = 0
-  best_loss = 10000
+  best_loss = float("Inf")
+  start = 0
 
-  for epoch in range(num_epochs):
+  for file in os.listdir(os.path.join(file_dir, 'checkpoints')):
+    if 'Model_Checkpoint' in file:
+      checkpoint = torch.load(os.path.join(file_dir, 'checkpoints', file)) 
+      print("Loading Checkpoint")
+      model.load_state_dict(checkpoint["State Dict"])
+      scheduler.load_state_dict(checkpoint["Scheduler"])
+      model.load_state_dict(checkpoint["State Dict"])
+      optimizer.load_state_dict(checkpoint["Optimizer"])
+      patience = checkpoint["Patience"]
+      best_loss = checkpoint["Best Loss"]
+      start = checkpoint["Epoch"]
+
+  for epoch in range(start, num_epochs):
     if verbose:
       print("Learning Rate = {0}".format(optimizer.param_groups[0]['lr']))
     model.warm_up_weight = min(epoch / warm_up_epoch, 1.0)
-
+    running_score = 0
     for i, sample in enumerate(train_loader):
       x = sample['x'].to(device=device)
       
@@ -47,13 +69,24 @@ def train(
       nn.utils.clip_grad_norm_(model.parameters(), 5)
       optimizer.step()
 
-      if i % 100 == 0 and verbose:
-        latent_y = model.get_latent_y(x)  # Latent y
-        guesses = torch.argmax(latent_y.probs, dim=1)
+      latent_y = model.get_latent_y(x)  # Latent y
+      guesses = torch.argmax(latent_y, dim=1)
 
-        score = NMI(guesses.cpu().detach().numpy(), sample['labels'])
+      score = NMI(guesses.cpu().detach().numpy(), sample['labels'])
+      running_score += score
+      if i % 100 == 0 and verbose and not i == 0:
+        checkpoint = {
+          "Model"      : model,
+          "State Dict" : model.state_dict(),
+          "Optimizer"  : optimizer.state_dict(),
+          "Scheduler"  : scheduler.state_dict(),
+          "Patience"   : patience,
+          "Best Loss"  : best_loss,
+          "Epoch"      : epoch,
+        }
+        torch.save(checkpoint, os.path.join(file_dir,'checkpoints', 'Model_Checkpoint.pth'))
         print("Training: Epoch[{}/{}], Step [{}/{}],  Loss: {:.4f}, KL Div Z: {:.4f}, KL Div Y: {:.4f}, Recon Loss: {:.4f}, Score: {}".format(
-                                  epoch + 1, num_epochs, i, len(train_loader), loss.item(), kl_divergence_z.item(), kl_divergence_y.item(), reconstruction_error.item(), score))
+                                  epoch + 1, num_epochs, i, len(train_loader), loss.item(), kl_divergence_z.item(), kl_divergence_y.item(), reconstruction_error.item(), running_score /(i)))
     if valid_loader:
       tot_loss = 0
       for i, sample in enumerate(valid_loader):

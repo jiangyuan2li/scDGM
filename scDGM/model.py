@@ -1,14 +1,14 @@
 import torch
 import torch.nn as nn
-from torch.distributions import Categorical, kl_divergence as kl
+from torch.distributions import Categorical
 
 from .layers import qy_given_x_encoder, qz_given_xy_encoder, pz_given_y_encoder, px_given_z_decoder
-from .loss import log_zinb_positive
+from .loss import loss
 
 class GMVAE(nn.Module):
     def __init__(self, 
                  n_input, 
-                 n_hidden=128, 
+                 n_hidden=[100,100], 
                  latent_size=32, 
                  n_clusters=7, 
                  n_iw_samples=1, 
@@ -23,6 +23,9 @@ class GMVAE(nn.Module):
         self.n_clusters = n_clusters
         self.warm_up_weight = warm_up_weight
         self.kl_weight = kl_weight
+        self.theta = nn.Parameter(
+            torch.rand(n_input)
+        )
 
         self.q_y_x_encoder = qy_given_x_encoder(n_input, n_hidden, n_clusters)
         self.q_z_xy_encoder = nn.ModuleList([])
@@ -103,48 +106,60 @@ class GMVAE(nn.Module):
           pi[k], p[k], log_r[k] = self.p_x_z_decoder[k](self.z[k].squeeze())
 
       # Loss
-        q_y_given_x_entropy = self.q_y_x.entropy()
-        p_y_entropy = torch.log(torch.tensor(self.n_clusters).float())
-        kl_divergence_y = q_y_given_x_entropy - p_y_entropy
-        
-        kl_divergence_z_mean = torch.zeros(x.size(0), self.latent_size).to(self.device)
-        reconstruct_losses = torch.zeros(self.n_clusters, x.size(0)).to(self.device)
-        for k in range(self.n_clusters):
-          kl_divergence_z_mean += kl(self.q_z_xy[k],self.p_z_y[k])
-
-          reconstruct_losses[k] = -log_zinb_positive(x, pi[k], p[k], log_r[k]).sum(dim = 1)
-
-        self.kl_divergence_z = torch.mean(kl_divergence_z_mean)
-        self.kl_divergence_y = torch.mean(kl_divergence_y)
-        self.reconstruction_error = torch.mean(reconstruct_losses)
-
-        self.lower_bound_weighted = (
-            self.reconstruction_error
-            + self.warm_up_weight * self.kl_weight * (
-                self.kl_divergence_z + self.kl_divergence_y
-            )
-        )
+        (self.lower_bound_weighted, 
+         self.kl_divergence_z, 
+         self.kl_divergence_y, 
+         self.reconstruction_error
+         ) = loss(
+            x,
+            (pi, self.theta, log_r),
+            self.q_y_x,
+            self.q_z_xy,
+            self.p_z_y,
+            self.n_clusters,
+            self.latent_size,
+            self.warm_up_weight,
+            self.kl_weight,
+            self.device
+         )
 
         return self.lower_bound_weighted, self.kl_divergence_z, self.kl_divergence_y, self.reconstruction_error
     
-    def get_latent_z(self, x):
+    def get_latent_z(self, x, length):
       with torch.no_grad():
+        self.q_z_xy_encoder.eval()
+        self.q_z_xy_encoder = self.q_z_xy_encoder.to(self.device)
         y = torch.eye(self.n_clusters).to(self.device)
-        latent = torch.zeros(self.n_clusters, x.size(0), self.latent_size)
-        for k in range(self.n_clusters):
-          self.q_z_xy_encoder[k].eval()
-          _, _, z = self.q_z_xy_encoder[k](x.to(self.device), y[k])
-          latent[k] = z.squeeze()
-          self.q_z_xy_encoder[k].train()
+        latent = torch.zeros(self.n_clusters, length, self.latent_size)
+        for i, sample in enumerate(x):
+            ind1 = i*sample['x'].size(0)
+            ind2 = ind1 + sample['x'].size(0)
+            input = sample['x'].to(self.device)
+            for k in range(self.n_clusters):
+                self.q_z_xy_encoder[k].eval()
+                _, _, z = self.q_z_xy_encoder[k](input, y[k])
+                latent[k,ind1:ind2,:] = z.squeeze()
+                self.q_z_xy_encoder[k].train()
+        self.q_z_xy_encoder.train()
 
       return latent.permute(1,0,2)
 
 
-    def get_latent_y(self, x):
-      with torch.no_grad():
-        self.q_y_x_encoder.eval()
-        q_y_x = self.q_y_x_encoder(x)
-        self.q_y_x_encoder.train()
+    def get_latent_y(self, x, length=None):
+        with torch.no_grad():
+            if length:
+                self.q_y_x_encoder = self.q_y_x_encoder.to(self.device)
+                self.q_y_x_encoder.eval()
+                latent = torch.zeros(length, self.n_clusters)
+                for i, sample in enumerate(x):
+                    ind1 = i*sample['x'].size(0)
+                    ind2 = ind1 + sample['x'].size(0)
+                    input = sample['x'].to(self.device)
+                    latent[ind1:ind2] = self.q_y_x_encoder(input).probs     
+            else:
+                latent = self.q_y_x_encoder(x).probs
+            self.q_y_x_encoder.train()
 
-      return q_y_x
+
+        return latent
 

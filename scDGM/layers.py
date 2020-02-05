@@ -6,14 +6,17 @@ from torch.distributions import Categorical, Normal
 class qy_given_x_encoder(nn.Module):
     def __init__(self, n_in, n_hidden, n_clusters):
         super(qy_given_x_encoder, self).__init__()
-        self.encoder = nn.Sequential(
-            nn.Linear(n_in, n_hidden),
-            nn.BatchNorm1d(n_hidden, momentum=0.01, eps=0.001),
-            nn.ReLU(),
-          )
+        modules = []
+        modules.append(nn.Linear(n_in, n_hidden[0]))
+        for layer in range(len(n_hidden)-1):
+          modules.append(nn.Linear(n_hidden[layer], n_hidden[layer + 1]))
+          modules.append(nn.BatchNorm1d(n_hidden[layer+1]))
+          modules.append(nn.ReLU())
+
+        self.encoder = nn.Sequential(*modules)
         
         self.logits = nn.Sequential(
-            nn.Linear(n_hidden, n_clusters),
+            nn.Linear(n_hidden[-1], n_clusters),
             nn.BatchNorm1d(n_clusters),
         )
 
@@ -43,14 +46,18 @@ class qz_given_xy_encoder(nn.Module):
       self.n_mc_samples = n_mc_samples
       self.latent_size = latent_size
 
-      self.encoder = nn.Sequential(
-          nn.Linear(n_in + n_clusters, n_hidden),
-          nn.BatchNorm1d(n_hidden),
-          nn.ReLU()
-      )
-      self.mean_encoder = nn.Linear(n_hidden, n_out)
+      modules = []
+      modules.append(nn.Linear(n_in + n_clusters, n_hidden[0]))
+      for layer in range(len(n_hidden)-1):
+        modules.append(nn.Linear(n_hidden[layer], n_hidden[layer + 1]))
+        modules.append(nn.BatchNorm1d(n_hidden[layer+1]))
+        modules.append(nn.ReLU())
+
+      self.encoder = nn.Sequential(*modules)
+
+      self.mean_encoder = nn.Linear(n_hidden[-1], n_out)
       self.var_encoder = nn.Sequential(
-          nn.Linear(n_hidden, n_out),
+          nn.Linear(n_hidden[-1], n_out),
           nn.Softplus()
       )
         
@@ -77,14 +84,18 @@ class pz_given_y_encoder(nn.Module):
     def __init__(self, n_in, n_hidden, n_out):
         super(pz_given_y_encoder, self).__init__()
 
-        self.encoder = nn.Sequential(
-            nn.Linear(n_in, n_hidden),
-            nn.Dropout(0.1),
-            nn.ReLU()
-        )
-        self.mean_encoder = nn.Linear(n_hidden, n_out)
+        modules = []
+        modules.append(nn.Linear(n_in, n_hidden[0]))
+        for layer in range(len(n_hidden)-1):
+          modules.append(nn.Linear(n_hidden[layer], n_hidden[layer + 1]))
+          modules.append(nn.BatchNorm1d(n_hidden[layer+1]))
+          modules.append(nn.ReLU())
+
+        self.encoder = nn.Sequential(*modules)
+
+        self.mean_encoder = nn.Linear(n_hidden[-1], n_out)
         self.var_encoder = nn.Sequential(
-            nn.Linear(n_hidden, n_out),
+            nn.Linear(n_hidden[-1], n_out),
             nn.Softplus()
         )
         
@@ -104,26 +115,30 @@ class pz_given_y_encoder(nn.Module):
 class px_given_z_decoder(nn.Module):
     def __init__(self, n_in, n_clusters, n_hidden, n_out):
         super(px_given_z_decoder, self).__init__()
-        self.px_decoder = nn.Sequential(
-            nn.Linear(n_in, n_hidden),
-            nn.BatchNorm1d(n_hidden, momentum=0.01, eps=0.001),
-            nn.ReLU()
-        )
+
+        modules = []
+        modules.append(nn.Linear(n_in, n_hidden[0]))
+        for layer in range(len(n_hidden)-1):
+          modules.append(nn.Linear(n_hidden[layer], n_hidden[layer + 1]))
+          modules.append(nn.BatchNorm1d(n_hidden[layer+1]))
+          modules.append(nn.ReLU())
+
+        self.px_decoder = nn.Sequential(*modules)
         
         self.decoder_pi = nn.Sequential(
-            nn.Linear(n_hidden, n_out),
+            nn.Linear(n_hidden[-1], n_out),
             nn.BatchNorm1d(n_out),
             nn.Softplus(),
         )
 
         self.decoder_p = nn.Sequential(
-            nn.Linear(n_hidden, n_out),
+            nn.Linear(n_hidden[-1], n_out),
             nn.BatchNorm1d(n_out),
             nn.Softplus(),
         )
 
         self.decoder_log_r = nn.Sequential(
-            nn.Linear(n_hidden, n_out),
+            nn.Linear(n_hidden[-1], n_out),
         )
         
     def forward(self, z: torch.Tensor):

@@ -9,15 +9,17 @@ from torch.utils.data import DataLoader
 
 def DataManager(batch_size, 
                  split=0, 
+                 shuffle=True,
                  data='CortexData'):
-        return eval(data)(batch_size,split)
+        return eval(data)(batch_size,split,shuffle)
 
-class PBMC(object):
+class PBMC_10K(object):
     def __init__(self,
            batch_size,
            split=0,
+           shuffle=True,
            data_path='./scDGM/data/10x_pbmc_pp.sparse.h5'):
-        super(PBMC, self).__init__()
+        super(PBMC_10K, self).__init__()
         self._split = split
         self._batch_size = batch_size
         with tables.open_file(data_path)as tables_file:
@@ -27,19 +29,24 @@ class PBMC(object):
         self.train_loader = DataLoader(
                 dataset=self.train_dataset,
                 batch_size=batch_size, 
-                shuffle=True,
+                shuffle=shuffle,
                 drop_last = True
             )
 
     def getX(self, val=False):
-        return self.train_dataset.x
+        for item in range(len(self.train_dataset)):
+            yield self.train_dataset.__getitem__(item)
 
-class Cortex:
+    def getShape(self):
+        return self.train_dataset.x.shape
+
+class Cortex(object):
     def __init__(self, 
                  batch_size, 
                  split=0, 
                  data_path="./scDGM/data/cortex_scAnnData.h5ad"
             ):
+        super(Cortex, self).__init__()
         assert(split <= 1)
         self._split = split
         self._batch_size = batch_size
@@ -72,6 +79,7 @@ class Cortex:
                     dataset=self.train_dataset,
                     batch_size=batch_size, 
                     shuffle=True,
+                    pin_memory=True,
                     drop_last = True
                 )
 
