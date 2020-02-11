@@ -46,7 +46,7 @@ def train(model,
     
     if file_ind:
         for file in os.listdir(os.path.join(file_dir, 'checkpoints')):
-            if 'Model_Checkpoint' in file:
+            if save_file in file:
                 checkpoint = torch.load(os.path.join(file_dir, 'checkpoints', file)) 
                 print("Loading Checkpoint")
                 model.load_state_dict(checkpoint["State Dict"])
@@ -72,9 +72,10 @@ def train(model,
             optimizer.step()
 
             latent_y = model.get_latent_y(x)  # Latent y
-            guesses = torch.argmax(latent_y, dim=1)
+
             
             if NMI_ind:
+                guesses = torch.argmax(latent_y, dim=1)
                 score = NMI(guesses.cpu().detach().numpy(), sample['labels'])
                 running_score += score
             if verbose:
@@ -87,6 +88,7 @@ def train(model,
                     "Best Loss"  : best_loss,
                     "Epoch"      : epoch,
                 }
+                print("Mean prob: ",latent_y.max(1).values.mean().item())
                 torch.save(checkpoint, os.path.join(file_dir,'checkpoints', save_file))
                 print("Training: Epoch[{}/{}], Step [{}/{}],  Loss: {:.4f}, KL Div Z: {:.4f}, KL Div Y: {:.4f}, Recon Loss: {:.4f}, Score: {}".format(
                                                                     epoch + 1, num_epochs, i, len(train_loader), loss.item(), kl_divergence_z.item(), kl_divergence_y.item(), reconstruction_error.item(), running_score /(i+1)))

@@ -146,6 +146,70 @@ class PBMC_8k_4k():
             return torch.tensor(self.val_data.obsm['X'])
         return torch.tensor(self.train_data.obsm['X'])
     
+class PreMergeLiuWu():
+    def __init__(self, wu_path = './data/wu_scRNAseq_sub.csv.gz',
+                liu_path = './data/Lin_data/filtered_feature_bc_matrix.h5'):
+        
+        wu_pd = pd.read_csv("./data/wu_scRNAseq_sub.csv.gz",index_col=0)
+        raw_data = sc.AnnData(X = wu_pd.to_numpy(dtype="float").transpose(),
+                     var = wu_pd.index,
+                     obs = wu_pd.columns.values)
+        raw_data.var.index = wu_pd.index.values
+        mito_genes = raw_data.var_names.str.startswith('mt-')
+        raw_data = raw_data[:,~mito_genes]
+        
+        raw_data.obsm['X'] = raw_data.X
+        sc.pp.normalize_per_cell(raw_data, counts_per_cell_after=1e4)
+        sc.pp.log1p(raw_data)
+        sc.pp.highly_variable_genes(raw_data)
+        
+        raw_data.X = raw_data.obsm['X']
+        raw_data = raw_data[:,raw_data.var['highly_variable']]
+        
+        raw_data2 = sc.read_10x_h5("./data/Lin_data/filtered_feature_bc_matrix.h5")
+        raw_data2.X = raw_data2.X.asformat('array')
+        mito_genes = raw_data2.var_names.str.startswith('mt-')
+        raw_data2 = raw_data2[:,~mito_genes]
+        
+        raw_data2.obsm['X'] = raw_data2.X
+        sc.pp.normalize_per_cell(raw_data2, counts_per_cell_after=1e4)
+        sc.pp.log1p(raw_data2)
+        sc.pp.highly_variable_genes(raw_data2)
+        
+        raw_data2.X = raw_data2.obsm['X']
+        raw_data2 = raw_data2[:,raw_data2.var['highly_variable']]
+        
+
+        self.raw_data = sc.AnnData(X=raw_data.X, var = raw_data.var.iloc[:,1:3])
+        self.raw_data2 = sc.AnnData(X=raw_data2.X, var = raw_data2.var.iloc[:,1:3])
+        self.out_data = self.raw_data.concatenate(self.raw_data2)
+        self.out_data.write_h5ad("./data/wu_liu_small.h5ad")
+        
+class MergeLiuWu():
+    def __init__(self,batch_size,file_path = './data/wu_liu_small.h5ad'):
+        self.raw_data = sc.read_h5ad(file_path)
+        self.raw_data.obsm['X'] = self.raw_data.X
+        self.train_data = self.raw_data
+        
+        self.train_dataset = MergeDataset(self.train_data)
+        self.train_loader = DataLoader(
+        dataset=self.train_dataset,
+        batch_size=batch_size, 
+        shuffle=True,
+        pin_memory=True,
+        drop_last = True)
+
+    def getRawData(self, val=False):
+        if val:
+            assert(self._split == True)
+            return self.val_data
+        return self.train_data
+
+    def getX(self, val=False):
+        if val:
+            assert(self._split == True)
+            return torch.tensor(self.val_data.obsm['X'])
+        return torch.tensor(self.train_data.obsm['X'])
 ############################################################################
 
 class PBMC_10K(object):
