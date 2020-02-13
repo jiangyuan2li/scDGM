@@ -51,7 +51,7 @@ def train(model,
                 print("Loading Checkpoint")
                 model.load_state_dict(checkpoint["State Dict"])
                 scheduler.load_state_dict(checkpoint["Scheduler"])
-                model.load_state_dict(checkpoint["State Dict"])
+                # model.load_state_dict(checkpoint["State Dict"])
                 optimizer.load_state_dict(checkpoint["Optimizer"])
                 patience = checkpoint["Patience"]
                 best_loss = checkpoint["Best Loss"]
@@ -88,10 +88,11 @@ def train(model,
                     "Best Loss"  : best_loss,
                     "Epoch"      : epoch,
                 }
-                print("Mean prob: ",latent_y.max(1).values.mean().item())
                 torch.save(checkpoint, os.path.join(file_dir,'checkpoints', save_file))
-                print("Training: Epoch[{}/{}], Step [{}/{}],  Loss: {:.4f}, KL Div Z: {:.4f}, KL Div Y: {:.4f}, Recon Loss: {:.4f}, Score: {}".format(
-                                                                    epoch + 1, num_epochs, i, len(train_loader), loss.item(), kl_divergence_z.item(), kl_divergence_y.item(), reconstruction_error.item(), running_score /(i+1)))
+                print("Training: Epoch[{}/{}], Step [{}/{}],  Loss: {:.4f}, KL Div Z: {:.4f}, KL Div Y: {:.4f}, Recon Loss: {:.4f},\nScore: {:.4f}, Mean prob: {:.4f}".format(
+                                                                    epoch + 1, num_epochs, i, len(train_loader), loss.item(), 
+                                                                    kl_divergence_z.item(), kl_divergence_y.item(), reconstruction_error.item(), 
+                                                                    running_score /(i+1), latent_y.max(1).values.mean().item()))
         if valid_loader:
             tot_loss = 0
             for i, sample in enumerate(valid_loader):

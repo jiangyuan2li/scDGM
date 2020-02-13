@@ -32,8 +32,8 @@ class SplatterData():
         raw_data.index = cell_info.index
         raw_adata = sc.AnnData(raw_data,var=gene_info,obs=cell_info)
 
-        sc.pp.normalize_per_cell(raw_adata, counts_per_cell_after=1e4)
-        sc.pp.log1p(raw_adata)
+        # sc.pp.normalize_per_cell(raw_adata, counts_per_cell_after=1e4)
+        # sc.pp.log1p(raw_adata)
 
         raw_adata.obsm['X'] = raw_adata.X
         

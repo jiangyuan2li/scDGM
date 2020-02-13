@@ -17,3 +17,4 @@ from .layers import *
 from .loss import *
 from .train import *
 from .evaluation import *
+from .utils import *

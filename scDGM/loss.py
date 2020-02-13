@@ -18,6 +18,8 @@ def loss(
     theta = torch.where(theta <= 0, torch.zeros(theta.size(0)).to(device) + 1e-8, theta)
     q_y_given_x_entropy = q_y_x.entropy()
     p_y_entropy = torch.log(torch.tensor(n_clusters).float())
+
+    # kl = \sum q log q/p = -(-\sum qlog q - -\sum qlog p)
     kl_divergence_y = q_y_given_x_entropy - p_y_entropy
     
     kl_divergence_z_mean = torch.zeros(x.size(0), latent_size).to(device)
@@ -76,6 +78,24 @@ def log_zinb_positive(x, mu, theta, pi, eps=1e-8):
     res = mul_case_zero + mul_case_non_zero
 
     return res
+
+def compute_kernel(x, y):
+    x_size = x.size(0)
+    y_size = y.size(0)
+    dim = x.size(1)
+    x = x.unsqueeze(1) # (x_size, 1, dim)
+    y = y.unsqueeze(0) # (1, y_size, dim)
+    tiled_x = x.expand(x_size, y_size, dim)
+    tiled_y = y.expand(x_size, y_size, dim)
+    kernel_input = (tiled_x - tiled_y).pow(2).mean(2)/float(dim)
+    return torch.exp(-kernel_input) # (x_size, y_size)
+
+def compute_mmd(x, y):
+    x_kernel = compute_kernel(x, x)
+    y_kernel = compute_kernel(y, y)
+    xy_kernel = compute_kernel(x, y)
+    mmd = x_kernel.mean() + y_kernel.mean() - 2*xy_kernel.mean()
+    return mmd
   
 def log_normal(x, mu, var, eps = 0.0, dim = 0):
     if eps > 0.0:

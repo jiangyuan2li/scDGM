@@ -79,6 +79,7 @@ class qz_given_xy_encoder(nn.Module):
 
       return q_z_given_x_y, z_mean, z
 
+##################### !!!! ######################
 # P(Z|Y)
 class pz_given_y_encoder(nn.Module):
     def __init__(self, n_in, n_hidden, n_out):
@@ -110,10 +111,14 @@ class pz_given_y_encoder(nn.Module):
         z_mean = p_z_given_y.mean
         
         return p_z_given_y, z_mean
-
+################################################
 # P(X|Z)
+
 class px_given_z_decoder(nn.Module):
     def __init__(self, n_in, n_clusters, n_hidden, n_out):
+
+    	## n_clusters to be removed later !!!
+        
         super(px_given_z_decoder, self).__init__()
 
         modules = []
@@ -125,30 +130,71 @@ class px_given_z_decoder(nn.Module):
 
         self.px_decoder = nn.Sequential(*modules)
         
+        self.decoder_mu = nn.Sequential(
+            nn.Linear(n_hidden[-1], n_out),
+            nn.BatchNorm1d(n_out)
+        )
+
+        self.decoder_theta = nn.Sequential(
+            nn.Linear(n_hidden[-1], n_out),
+            nn.BatchNorm1d(n_out),
+            nn.Softplus(),
+        )
+
         self.decoder_pi = nn.Sequential(
-            nn.Linear(n_hidden[-1], n_out),
-            nn.BatchNorm1d(n_out),
-            nn.Softplus(),
-        )
-
-        self.decoder_p = nn.Sequential(
-            nn.Linear(n_hidden[-1], n_out),
-            nn.BatchNorm1d(n_out),
-            nn.Softplus(),
-        )
-
-        self.decoder_log_r = nn.Sequential(
             nn.Linear(n_hidden[-1], n_out),
         )
         
     def forward(self, z: torch.Tensor):
         z = self.px_decoder(z)
         
+        mu = torch.exp(self.decoder_mu(z))
+        theta = self.decoder_theta(z)
         pi = self.decoder_pi(z)
-        p = self.decoder_p(z)
-        log_r = self.decoder_log_r(z)
 
-        return pi, p, log_r
+        return mu, theta, pi
+
+# ################# original ###################        
+# class px_given_z_decoder(nn.Module):
+#     def __init__(self, n_in, n_clusters, n_hidden, n_out):
+
+#     	## n_clusters to be removed later !!!
+        
+#         super(px_given_z_decoder, self).__init__()
+
+#         modules = []
+#         modules.append(nn.Linear(n_in, n_hidden[0]))
+#         for layer in range(len(n_hidden)-1):
+#           modules.append(nn.Linear(n_hidden[layer], n_hidden[layer + 1]))
+#           modules.append(nn.BatchNorm1d(n_hidden[layer+1]))
+#           modules.append(nn.ReLU())
+
+#         self.px_decoder = nn.Sequential(*modules)
+        
+#         self.decoder_pi = nn.Sequential(
+#             nn.Linear(n_hidden[-1], n_out),
+#             nn.BatchNorm1d(n_out),
+#             nn.exp(),
+#         )
+
+#         self.decoder_p = nn.Sequential(
+#             nn.Linear(n_hidden[-1], n_out),
+#             nn.BatchNorm1d(n_out),
+#             nn.Softplus(),
+#         )
+
+#         self.decoder_log_r = nn.Sequential(
+#             nn.Linear(n_hidden[-1], n_out),
+#         )
+        
+#     def forward(self, z: torch.Tensor):
+#         z = self.px_decoder(z)
+        
+#         pi = self.decoder_pi(z)
+#         p = self.decoder_p(z)
+#         log_r = self.decoder_log_r(z)
+
+#         return pi, p, log_r
 
 
 
