@@ -1,6 +1,8 @@
 # scDGM
 single cell analysis with deep generative model
 
+Some experiments: [clustering](https://htmlpreview.github.io/?https://github.com/jiangyuan2li/scDGM/blob/Jiangyuan/test_clustering.html) of scDeepGMM, [merging](https://htmlpreview.github.io/?https://github.com/jiangyuan2li/scDGM/blob/Jiangyuan/test_merging.html) of scDeepGMM 
+
 References
 --------
 
