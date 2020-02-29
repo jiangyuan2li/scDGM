@@ -15,14 +15,19 @@ class GMVAE(nn.Module):
         latent_size = 32, 
         n_clusters = 2, 
         warm_up_weight_z = 1,
-        warm_up_weight_y = 1):
+        warm_up_weight_y = 1, 
+        batches = None):
 
         super(GMVAE, self).__init__()
 
+        self.batches = batches
         self.n_clusters = n_clusters
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
-        self.encoder = Encoder(n_input, n_hidden, latent_size)
+        if batches is not None:
+            self.encoder = Encoder(n_input + batches, n_hidden, latent_size)
+        else:
+            self.encoder = Encoder(n_input, n_hidden, latent_size)
         self.decoder = Decoder(latent_size, n_hidden, n_input)
 
         self.pi_c = nn.Parameter(torch.ones(n_clusters)/n_clusters)  # pc
@@ -31,7 +36,12 @@ class GMVAE(nn.Module):
         self.theta = nn.Softplus(nn.Parameter(torch.ones(n_input)))
     def forward(self, x, batch_ids = None):
         
-        z, z_mean, z_var = self.encoder(x)
+        if self.batches is not None:
+            reverse = 1 - batch_ids
+            x_ = torch.cat((x, batch_ids.unsqueeze(-1), reverse.unsqueeze(-1)), dim = 1)
+        else:
+            x_ = x
+        z, z_mean, z_var = self.encoder(x_)
         mu, theta, pi = self.decoder(z)
 
         
@@ -41,11 +51,17 @@ class GMVAE(nn.Module):
 
         likelihood, kld_z, kld_c = elbo_scaleRNA((mu,theta,pi), x, pi_c_post, (mu_c, var_c, pi_c), (z_mean, z_var))
 
+        clusters = torch.argmax(pi_c_post,1)
+        
         mmd = torch.tensor(0.)
-        if batch_ids is not None:
-            z_mean_1 = z_mean[batch_ids == 1.]
-            z_mean_0 = z_mean[batch_ids == 0.]
-            mmd = compute_mmd(z_mean_0, z_mean_1)
+        if self.batches is not None:
+            for i in range(self.n_clusters):
+                idx1 = (batch_ids == 1.) & (clusters == i)
+                idx0 = (batch_ids == 0.) & (clusters == i)
+                if idx1.any() and idx0.any():
+                    z_mean_1 = z_mean[idx1]
+                    z_mean_0 = z_mean[idx0]
+                    mmd += compute_mmd(z_mean_0, z_mean_1)
             n = x.size(0)
             mmd = n*mmd
         return likelihood, kld_z, kld_c, mmd
@@ -53,25 +69,39 @@ class GMVAE(nn.Module):
     def init_gmm(self, x):
 
         gmm = GaussianMixture(n_components=self.n_clusters, covariance_type='diag')
-        _,_,z = self.encoder(x)
+        if self.batches is not None:
+            x_ = torch.cat((x,torch.zeros((x.size(0),2))), dim =1)
+        else:
+            x_ = x
+        _,_,z = self.encoder(x_)
         gmm.fit(z.detach().numpy())
         self.mu_c.data.copy_(torch.from_numpy(gmm.means_.T.astype(np.float32)))
         self.var_c.data.copy_(torch.from_numpy(gmm.covariances_.T.astype(np.float32)))
 
-    def get_latent_y(self, x):
+    def get_latent_y(self, x, batch_ids = None):
         
         with torch.no_grad():
+            if self.batches is not None:
+                reverse = 1 - batch_ids
+                x_ = torch.cat((x, batch_ids.unsqueeze(-1), reverse.unsqueeze(-1)), dim = 1)
+            else:
+                x_ = x
             self.eval()
-            _,z_mean,_ = self.encoder(x)
+            _,z_mean,_ = self.encoder(x_)
             pi_c_post, mu_c, var_c, pi_c = get_pi_c_posterior(z_mean, (self.pi_c, self.mu_c, self.var_c))
             self.train()
 
         return pi_c_post
 
-    def get_latent_z(self,x):
+    def get_latent_z(self,x, batch_ids = None):
         with torch.no_grad():
+            if self.batches is not None:
+                reverse = 1 - batch_ids
+                x_ = torch.cat((x, batch_ids.unsqueeze(-1), reverse.unsqueeze(-1)), dim = 1)
+            else:
+                x_ = x
             self.eval()
-            _, z_mean, _ = self.encoder(x)
+            _, z_mean, _ = self.encoder(x_)
             self.train()
         return z_mean
 
