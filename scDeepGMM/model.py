@@ -28,6 +28,7 @@ class GMVAE(nn.Module):
             self.encoder = Encoder(n_input + batches, n_hidden, latent_size)
         else:
             self.encoder = Encoder(n_input, n_hidden, latent_size)
+            
         self.decoder = Decoder(latent_size, n_hidden, n_input)
 
         self.pi_c = nn.Parameter(torch.ones(n_clusters)/n_clusters)  # pc

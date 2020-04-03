@@ -48,6 +48,49 @@ class DataWithClusters():
         return torch.tensor(self.train_data.obsm['X'])
 
 #########################################################
+class Mouse_healthy():
+    def __init__(self, batch_size, data_path = "./data/mouse_liver/GSE129516_RAW/GSM3714747_chow1_filtered_gene_bc_matrices.csv.gz",
+                data_path2 = "./data/mouse_liver/GSE129516_RAW/GSM3714748_chow2_filtered_gene_bc_matrices.csv.gz"):
+        
+        self.raw_data = sc.read_csv(data_path).transpose()
+        self.raw_data2 = sc.read_csv(data_path2).transpose()
+        self.raw_data = self.raw_data.concatenate(self.raw_data2)
+        
+        #self.raw_data.X = self.raw_data.X.asformat("array")
+
+        sc.pp.normalize_per_cell(self.raw_data, counts_per_cell_after=1e4)
+        sc.pp.log1p(self.raw_data)
+        sc.pp.highly_variable_genes(self.raw_data)
+        
+        self.raw_data.X = self.raw_data.X.astype("float32")
+        self.raw_data.obsm['X'] = self.raw_data.X[:,self.raw_data.var['highly_variable']].astype(np.float32)
+        
+        # x_vec = self.raw_data.obs['batch'].values.astype("float32")
+        # x_counter = 1 - x_vec
+        
+        # self.raw_data.obsm['X'] = np.column_stack((self.raw_data.obsm['X'], x_vec, x_counter))
+        
+        self.train_data = self.raw_data
+        self.train_dataset = MergeDataset(self.raw_data)
+        
+        self.train_loader = DataLoader(
+                    dataset=self.train_dataset,
+                    batch_size=batch_size, 
+                    shuffle=True,
+                    drop_last = True
+                )
+        
+    def getRawData(self, val=False):
+        if val:
+            assert(self._split == True)
+            return self.val_data
+        return self.train_data
+
+    def getX(self, val=False):
+        if val:
+            assert(self._split == True)
+            return torch.tensor(self.val_data.obsm['X'])
+        return torch.tensor(self.train_data.obsm['X'])
 
 class PBMC_8k_4k():
     def __init__(self, batch_size, data_path = "./data/10X/pbmc4k/filtered_gene_bc_matrices/GRCh38/",
